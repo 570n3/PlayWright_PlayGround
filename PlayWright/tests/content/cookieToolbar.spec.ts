@@ -1,6 +1,8 @@
 import { chromium, test, expect } from "@playwright/test";
 import { cookieToolbar } from "../../strategies/content/cookieToolbar/cookieToolbar";
 
+//changes added
+
 test.describe("Component Visibility Test", () => {
   let toolbar: cookieToolbar;
 
