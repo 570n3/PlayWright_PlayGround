@@ -1,44 +1,38 @@
 import { chromium, expect, test } from "@playwright/test";
 import * as fs from "fs/promises";
-//import { setupTestEnvironment } from "../../compHelpers/helpers/testSetup";
 
 async function verifyCSSValues(page, locator, cssValues) {
   await page.waitForSelector(locator, { state: "visible" });
   const element = await page.locator(locator);
 
+  let hasError = false;
+
   for (const [property, expectedValue] of Object.entries(cssValues)) {
     try {
       await expect(element).toHaveCSS(property, expectedValue as string);
+      console.log(`CSS value matched for locator '${locator}', property '${property}': ${expectedValue}`);
     } catch (error) {
-      console.error(
-        `CSS value mismatch for property '${property}': ${error.message}`
-      );
-      throw error;
+      console.error(`CSS value mismatch for locator '${locator}', property '${property}': ${error.message}`);
+      hasError = true;
     }
   }
+
+  if (hasError) {
+    console.error(`CSS values verification failed for locator '${locator}'`);
+    return false;
+  }
+  return true;
 }
 
-
-async function acceptCookieBanner(page) {
-    const acceptAllButton = await page.locator('//*[@id="coiPage-1"]/div[2]/div[1]/button[3]');
-    const isVisible = await acceptAllButton.isVisible();
-  
-    if (isVisible) {
-      await acceptAllButton.click();
-    } else {
-      console.log('Accept All button not found/visible.');
-    }
-  }
-test.skip("Verify CSS values from JSON file", async ({}, testInfo) => {
+test("Verify CSS values from JSON file", async ({}, testInfo) => {
   testInfo.timeout = 60000;
-  const browser = await chromium.launch({ headless: true });
+  const browser = await chromium.launch({ headless: false });
+
+  let hasTestFailed = false;
 
   try {
     const path = require("path");
-    const jsonFile = path.join(
-      __dirname,
-      "../../strategies/data/urlsAndCSSWithLocators.json"
-    );
+    const jsonFile = path.join(__dirname, "../data/urlsAndCSSWithLocators.json");
     const fileContents = await fs.readFile(jsonFile, "utf-8");
     const urlsAndCSS = JSON.parse(fileContents);
     const urlsData = urlsAndCSS.urls;
@@ -46,25 +40,37 @@ test.skip("Verify CSS values from JSON file", async ({}, testInfo) => {
     for (const urlData of urlsData) {
       const url = urlData.url;
       const elements = urlData.elements;
+      let hasError = false;
 
       const context = await browser.newContext();
       const page = await context.newPage();
       await page.goto(url);
 
-      await acceptCookieBanner(page);
-
       for (const elementData of elements) {
         const locator = elementData.locator;
         const cssProperties = elementData.cssProperties;
 
-        await verifyCSSValues(page, locator, cssProperties);
+        const result = await verifyCSSValues(page, locator, cssProperties);
+        if (!result) {
+          hasError = true;
+        }
       }
 
       await context.close();
+
+      if (hasError) {
+        console.error(`Test failed for URL '${url}'`);
+        hasTestFailed = true;
+      }
+    }
+
+    if (hasTestFailed) {
+      throw new Error("Test failed due to CSS value mismatch");
     }
   } catch (error) {
     console.error("Error reading JSON file:", error);
+    throw error; 
   } finally {
-    await browser.close();
+    await browser.close(); 
   }
 });
